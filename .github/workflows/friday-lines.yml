@@ -1,0 +1,37 @@
+# Optional: capture Friday's lines automatically so the commissioner only has
+# to review and press "Publish & Lock".
+#
+# Setup (once):
+#   1. Set CRON_SECRET in your host's environment variables.
+#   2. In this repo: Settings -> Secrets and variables -> Actions, add
+#        POOL_URL     e.g. https://ghm-football-pool.onrender.com
+#        CRON_SECRET  the same value you set on the host
+#
+# Both schedules fire, but the server only acts during the 10 AM Central hour,
+# so exactly one of them does the work whether or not daylight saving is on.
+name: Friday line capture
+
+on:
+  schedule:
+    - cron: '5 15 * * 5'   # 10:05 AM CDT (summer)
+    - cron: '5 16 * * 5'   # 10:05 AM CST (winter)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Capture now, ignoring the 10 AM Central check'
+        type: boolean
+        default: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare next week
+        env:
+          POOL_URL: ${{ secrets.POOL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FORCE: ${{ inputs.force && '1' || '0' }}
+        run: |
+          curl -sS -f -X POST \
+            "$POOL_URL/api/cron/prepare-week?key=$CRON_SECRET&force=$FORCE" \
+            -H 'Content-Type: application/json' | tee response.json

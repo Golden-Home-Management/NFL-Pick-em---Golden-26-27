@@ -1,0 +1,25 @@
+# One-click-ish deploy for Render (https://render.com).
+# The disk keeps data/pool.json across restarts and redeploys.
+services:
+  - type: web
+    name: ghm-football-pool
+    runtime: node
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /
+    disk:
+      name: pool-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_FILE
+        value: /var/data/pool.json
+      - key: SEASON
+        value: "2026"
+      - key: ODDS_API_KEY
+        sync: false
+      - key: ADMIN_PIN
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en" class="admin">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>Commissioner · GHM Football Pool</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231B2A6B'/%3E%3Cpath d='M6 15 16 7l10 8' stroke='%23FFC844' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="admin">
+
+<div class="stickyhead">
+<header class="topbar">
+  <div class="topbar-row">
+    <div class="brand">
+      <svg class="roof" width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M5 16 16 6l11 10" stroke="#FFC844" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 17v8h14v-8" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Commissioner</h1>
+        <div class="week-label" id="adminSub">GHM Football Pool</div>
+      </div>
+    </div>
+    <div class="whoami"><a href="/" style="color:#DCD6C9;font-size:12px">View pool &rarr;</a></div>
+  </div>
+</header>
+</div>
+
+<main>
+  <div id="adminConfigNotice"></div>
+  <div id="adminNotice"></div>
+
+  <section id="adminLogin" class="hidden">
+    <div class="login">
+      <h2>Commissioner sign-in</h2>
+      <p>Enter the admin PIN. This page controls lines, scores and participants.</p>
+      <div class="field">
+        <label for="adminPin">Admin PIN</label>
+        <input id="adminPin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••">
+      </div>
+      <button class="btn primary" id="adminLoginBtn">Sign in</button>
+      <div id="adminLoginError" class="notice error hidden" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section id="adminApp" class="hidden">
+
+    <!-- Friday workflow -->
+    <div class="card">
+      <h3>Friday workflow &mdash; under 5 minutes</h3>
+      <div class="step">
+        <span class="n">1</span>
+        <div class="body">
+          <strong>Start next week</strong>
+          <p>Creates the week, pulls Sunday NFL games, suggests the top 3 Saturday college games and captures spreads.</p>
+          <button class="btn primary small" id="startWeekBtn">Start Next Week</button>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <div class="body">
+          <strong>Review below</strong>
+          <p>Swap college games, fix any missing line, then freeze it.</p>
+          <div class="row">
+            <button class="btn ghost small" id="refreshLinesBtn">Refresh Lines</button>
+            <button class="btn ghost small" id="collegeSuggestBtn">Re-suggest College</button>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <div class="body">
+          <strong>Publish &amp; lock</strong>
+          <p>Freezes every spread and opens picks. Everyone's bookmark shows the new week automatically.</p>
+          <div class="row">
+            <button class="btn primary small" id="publishBtn">Publish &amp; Lock Week</button>
+            <button class="btn small ghost" id="unlockBtn">Unlock (data error)</button>
+            <button class="btn small ghost" id="completeBtn">Mark Week Complete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- week selector + status -->
+    <div class="card">
+      <h3>Week</h3>
+      <div style="padding:12px 14px">
+        <div class="row">
+          <div class="field grow" style="margin:0">
+            <label for="weekSelect">Editing week</label>
+            <select id="weekSelect"></select>
+          </div>
+          <div class="field" style="margin:0;min-width:150px">
+            <label for="sundayDate">Sunday</label>
+            <input id="sundayDate" type="date">
+          </div>
+          <div class="field" style="margin:0;min-width:150px">
+            <label for="saturdayDate">Saturday</label>
+            <input id="saturdayDate" type="date">
+          </div>
+        </div>
+        <p id="weekStatus" style="font-size:13px;color:#4A4E55;margin:10px 0 0"></p>
+      </div>
+    </div>
+
+    <!-- college -->
+    <div class="card">
+      <h3>Saturday college &mdash; featured 3</h3>
+      <div id="collegeSelected" style="padding:4px 0"></div>
+      <div style="padding:10px 14px;border-top:1px solid #DCD6C9">
+        <strong style="font-size:13px">Suggested top 3 college games</strong>
+        <p style="font-size:12.5px;color:#4A4E55;margin:4px 0 8px">
+          Ranked by brand prominence, market interest and how close the line is. Tick exactly three.
+        </p>
+        <div id="collegeCandidates" class="log" style="max-height:340px"></div>
+        <button class="btn small ghost" id="saveCollegeBtn" style="margin-top:10px">Save college selection</button>
+      </div>
+    </div>
+
+    <!-- nfl -->
+    <div class="card">
+      <h3>Sunday NFL</h3>
+      <div id="nflTable"></div>
+      <div style="padding:10px 14px;border-top:1px solid #DCD6C9">
+        <button class="btn small ghost" id="importNflBtn">Re-import Sunday NFL games</button>
+      </div>
+    </div>
+
+    <!-- scores -->
+    <div class="card">
+      <h3>Final scores</h3>
+      <div style="padding:10px 14px">
+        <div class="row">
+          <button class="btn small ghost" id="fetchScoresBtn">Auto-fetch final scores</button>
+          <span style="font-size:12.5px;color:#4A4E55">Or type them in below. Manual entries always win.</span>
+        </div>
+      </div>
+      <div id="scoreTable"></div>
+    </div>
+
+    <!-- picks -->
+    <div class="card">
+      <h3>Picks &amp; survivor (override)</h3>
+      <div id="pickMatrix" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- manual game -->
+    <div class="card">
+      <h3>Add a game manually</h3>
+      <div style="padding:12px 14px">
+        <p style="font-size:12.5px;color:#4A4E55;margin:0 0 10px">
+          Use this if The Odds API is down or a game is missing. The week must be unlocked.
+        </p>
+        <div class="row">
+          <div class="field" style="margin:0;min-width:110px">
+            <label for="mgSport">Sport</label>
+            <select id="mgSport"><option value="nfl">NFL</option><option value="ncaaf">College</option></select>
+          </div>
+          <div class="field grow" style="margin:0"><label for="mgAway">Away team</label><input id="mgAway" type="text"></div>
+          <div class="field grow" style="margin:0"><label for="mgHome">Home team</label><input id="mgHome" type="text"></div>
+          <div class="field" style="margin:0;min-width:200px"><label for="mgTime">Kickoff (Central)</label><input id="mgTime" type="datetime-local"></div>
+          <div class="field" style="margin:0;width:110px"><label for="mgSpread">Home spread</label><input id="mgSpread" type="number" step="0.5"></div>
+        </div>
+        <button class="btn small ghost" id="addGameBtn" style="margin-top:10px">Add game</button>
+      </div>
+    </div>
+
+    <!-- participants -->
+    <div class="card">
+      <h3>Participants</h3>
+      <div id="participantTable"></div>
+      <div style="padding:10px 14px;border-top:1px solid #DCD6C9">
+        <div class="row">
+          <input id="newParticipant" type="text" class="grow" placeholder="Add a participant">
+          <button class="btn small ghost" id="addParticipantBtn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- settings -->
+    <div class="card">
+      <h3>Pool settings</h3>
+      <div style="padding:12px 14px">
+        <div class="row">
+          <div class="field" style="margin:0;min-width:200px">
+            <label for="strikeRule">Survivor elimination</label>
+            <select id="strikeRule">
+              <option value="1">1 strike and you're out</option>
+              <option value="2">2 strikes and you're out</option>
+            </select>
+          </div>
+          <div class="field grow" style="margin:0">
+            <label for="poolNameInput">Pool name (header)</label>
+            <input id="poolNameInput" type="text" maxlength="40">
+          </div>
+        </div>
+        <button class="btn small ghost" id="saveSettingsBtn" style="margin-top:10px">Save settings</button>
+      </div>
+    </div>
+
+    <!-- deadlines -->
+    <div class="card">
+      <h3>Pick deadlines</h3>
+      <div style="padding:12px 14px">
+        <p style="font-size:12.5px;color:#4A4E55;margin:0 0 10px">
+          Each game locks at its own kickoff. Survivor locks at the first Sunday kickoff unless you override it here.
+        </p>
+        <div class="row">
+          <div class="field grow" style="margin:0">
+            <label for="survivorLock">Survivor lock (Central)</label>
+            <input id="survivorLock" type="datetime-local">
+          </div>
+          <button class="btn small ghost" id="saveDeadlineBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- audit -->
+    <div class="card">
+      <h3>Audit log</h3>
+      <div id="auditLog" class="log"></div>
+    </div>
+
+    <p class="footer-note">
+      <button class="btn small ghost" id="adminLogoutBtn">Sign out of commissioner</button>
+    </p>
+  </section>
+</main>
+
+<div class="toast hidden" id="toast"></div>
+<script src="/admin.js"></script>
+</body>
+</html>
