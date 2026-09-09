@@ -257,7 +257,8 @@ would lose picks on every redeploy.
    URI (use the *session pooler* string). Copy it. No SQL to run — the app
    creates its one table on first use.
 2. **Vercel:** import the repo. `vercel.json` routes everything to
-   `api/index.js`; there is no build step to configure.
+   `api/index.js`; there is no build step to configure. The app creates its
+   `pool_state` table on first request, so there is nothing to migrate.
 3. Environment variables: `DATABASE_URL` (the Supabase URI), `STORAGE=postgres`,
    `ODDS_API_KEY`, `ADMIN_PIN`, `SESSION_SECRET`.
 4. Deploy and bookmark the `*.vercel.app` URL (or attach a custom domain).
@@ -507,11 +508,16 @@ thing to break on a Sunday morning.
 ## Tests
 
 ```bash
-npm test
+npm test                                        # against the JSON file backend
+
+# and against the Postgres backend - the same code path Supabase uses:
+TEST_DATABASE_URL=postgres://user@host:5432/postgres npm test
 ```
 
-138 checks against the real HTTP app, a temp data file and a mocked Odds API —
-no network calls, no API quota spent. Covering:
+138 checks against the real HTTP app and a mocked Odds API — no network calls,
+no API quota spent. The full suite passes on **both** storage backends, and was
+run against a live Postgres including the serverless case (one process writes,
+a cold second process reads it back). Covering:
 
 - ATS grading: cover, no-cover, exact push, half-point line, pick-em line,
   underdog mirror, ungraded games, and the 1 / 0.5 / 0 scale
