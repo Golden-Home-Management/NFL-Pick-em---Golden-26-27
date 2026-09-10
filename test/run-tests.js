@@ -908,6 +908,74 @@ async function testGameplay() {
 /* 5. Security surface                                                       */
 /* ========================================================================= */
 
+async function testBruteForce() {
+  group('Login throttling (brute force)');
+  const mock = installMockOdds({ nfl: [], ncaaf: [] });
+  const srv = await startServer();
+  const attacker = client(srv.base, '203.0.113.9');
+  const admin = client(srv.base, '198.51.100.4');
+  const player = client(srv.base, '198.51.100.77');
+  try {
+    // Simulate someone who has read the public source and knows the PIN is 4 digits.
+    let blockedAt = null;
+    let succeededWithWrongPin = false;
+    for (let i = 0; i < 40; i += 1) {
+      const guess = String(1000 + i);
+      const res = await attacker.post('/api/admin/login', { pin: guess });
+      if (res.status === 200) succeededWithWrongPin = true;
+      if (res.status === 429 && blockedAt === null) blockedAt = i;
+    }
+    check('a wrong PIN never authenticates', () => assert.strictEqual(succeededWithWrongPin, false));
+    check('the attacker is locked out after 5 tries, not 10,000', () => {
+      assert.notStrictEqual(blockedAt, null, 'never got a 429 - brute force was unthrottled');
+      assert.ok(blockedAt <= 5, `locked out only after ${blockedAt} attempts`);
+    });
+
+    const res429 = await attacker.post('/api/admin/login', { pin: '9137' });
+    check('even the CORRECT PIN is refused while locked out', () => {
+      assert.strictEqual(res429.status, 429);
+      assert.ok(/try again in/i.test(res429.data.error), res429.data.error);
+    });
+
+    const okAdmin = await admin.post('/api/admin/login', { pin: '9137' });
+    check('a different client is unaffected by that lockout', () => {
+      assert.strictEqual(okAdmin.status, 200);
+    });
+    const audit = (await admin.get('/api/admin/audit')).data.audit;
+    check('the lockout and the successful sign-in are both audited', () => {
+      assert.ok(audit.some((a) => a.action === 'admin.login-locked'), 'no lockout entry');
+      assert.ok(audit.some((a) => a.action === 'admin.login'), 'no sign-in entry');
+    });
+
+    // Participant PINs are throttled too.
+    const st = (await admin.get('/api/admin/state')).data;
+    const p1 = st.participants[0];
+    let pBlocked = null;
+    for (let i = 0; i < 12; i += 1) {
+      const r = await player.post('/api/login', { participantId: p1.id, pin: String(2000 + i) });
+      if (r.status === 429 && pBlocked === null) pBlocked = i;
+    }
+    check('participant PIN guessing is throttled as well', () => {
+      assert.notStrictEqual(pBlocked, null);
+      assert.ok(pBlocked <= 5, `locked after ${pBlocked}`);
+    });
+    const stillLocked = await player.post('/api/login', { participantId: p1.id, pin: p1.pin });
+    check('the real participant PIN is also refused while locked', () => {
+      assert.strictEqual(stillLocked.status, 429);
+    });
+
+    const fresh = client(srv.base, '198.51.100.200');
+    const unknown = await fresh.post('/api/login', { participantId: 'p_doesnotexist', pin: '1234' });
+    check('an unknown participant does not leak that it is unknown', () => {
+      assert.strictEqual(unknown.status, 401);
+      assert.strictEqual(unknown.data.error, 'That PIN is not right');
+    });
+  } finally {
+    mock.restore();
+    await srv.close();
+  }
+}
+
 async function testSecurity() {
   group('Security');
   const mock = installMockOdds({ nfl: [], ncaaf: [] });
@@ -1010,6 +1078,7 @@ async function testSecurity() {
   await testPublishGuards();
   await testCron();
   await testGameplay();
+  await testBruteForce();
   await testSecurity();
 
   console.log(`\n${'─'.repeat(58)}`);

@@ -14,6 +14,7 @@ const state = require('./state');
 const scoring = require('./scoring');
 const odds = require('./odds');
 const auth = require('./auth');
+const ratelimit = require('./ratelimit');
 const timeutil = require('./time');
 const { NFL_TEAMS } = require('./teams');
 const { createStore } = require('./store');
@@ -204,14 +205,46 @@ function createApp(config) {
 
   async function handleLogin(req) {
     const body = await readBody(req);
-    const doc = await store.read();
-    const p = state.participantById(doc, body.participantId);
-    if (!p || !p.active) throw new HttpError(404, 'Unknown participant');
-    if (!auth.pinMatches(body.pin, p.pin)) throw new HttpError(401, 'That PIN is not right');
-    return {
-      token: auth.makeToken(p.id, config.sessionSecret),
-      me: { id: p.id, name: p.name },
-    };
+    const ip = ratelimit.clientIp(req);
+    // Throttle on the participant AND the caller, so neither a single account
+    // nor a single source can be hammered.
+    const keys = [`p:${body.participantId}`, `pip:${ip}`];
+
+    // store.mutate rolls back when its callback throws, so a failed attempt must
+    // RETURN a verdict rather than throw - otherwise the counter is discarded and
+    // the throttle never engages.
+    const verdict = await store.mutate((doc) => {
+      for (const key of keys) {
+        const wait = ratelimit.lockedFor(doc, key);
+        if (wait) return { kind: 'locked', wait };
+      }
+      const p = state.participantById(doc, body.participantId);
+      const good = p && p.active && auth.pinMatches(body.pin, p.pin);
+      if (!good) {
+        const r = keys.map((k) => ratelimit.recordFailure(doc, k)).pop();
+        return { kind: 'bad', lockedSeconds: r.lockedSeconds };
+      }
+      for (const key of keys) ratelimit.clearFailures(doc, key);
+      return {
+        kind: 'ok',
+        token: auth.makeToken(p.id, config.sessionSecret),
+        me: { id: p.id, name: p.name },
+      };
+    });
+
+    if (verdict.kind === 'locked') {
+      throw new HttpError(429, `Too many wrong PINs. Try again in ${Math.ceil(verdict.wait / 60)} minute(s).`);
+    }
+    if (verdict.kind === 'bad') {
+      // Same message whether the participant exists or not.
+      throw new HttpError(
+        401,
+        verdict.lockedSeconds
+          ? `That PIN is not right. Too many attempts - locked for ${Math.ceil(verdict.lockedSeconds / 60)} minute(s).`
+          : 'That PIN is not right'
+      );
+    }
+    return { token: verdict.token, me: verdict.me };
   }
 
   async function submitPicks(req, participant) {
@@ -773,7 +806,36 @@ function createApp(config) {
 
   route('POST', '/api/admin/login', async (req) => {
     const body = await readBody(req);
-    if (!auth.pinMatches(body.pin, config.adminPin)) throw new HttpError(401, 'Wrong commissioner PIN');
+    const ip = ratelimit.clientIp(req);
+    const key = `admin:${ip}`;
+
+    const verdict = await store.mutate((doc) => {
+      const wait = ratelimit.lockedFor(doc, key);
+      if (wait) return { kind: 'locked', wait };
+      if (!auth.pinMatches(body.pin, config.adminPin)) {
+        const r = ratelimit.recordFailure(doc, key);
+        if (r.lockedSeconds) {
+          state.logAudit(doc, 'security', 'admin.login-locked', { ip, failures: r.failures });
+        }
+        return { kind: 'bad', lockedSeconds: r.lockedSeconds };
+      }
+      ratelimit.clearFailures(doc, key);
+      state.logAudit(doc, 'commissioner', 'admin.login', { ip });
+      return { kind: 'ok' };
+    });
+
+    if (verdict.kind === 'locked') {
+      throw new HttpError(429, `Too many wrong PINs. Try again in ${Math.ceil(verdict.wait / 60)} minute(s).`);
+    }
+    if (verdict.kind === 'bad') {
+      throw new HttpError(
+        401,
+        verdict.lockedSeconds
+          ? `Wrong commissioner PIN. Locked for ${Math.ceil(verdict.lockedSeconds / 60)} minute(s).`
+          : 'Wrong commissioner PIN'
+      );
+    }
+
     return {
       body: { ok: true },
       headers: {

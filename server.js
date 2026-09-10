@@ -16,7 +16,18 @@ const server = http.createServer((req, res) => {
   });
 });
 
+const { assessPin } = require('./src/ratelimit');
+
 server.listen(config.port, () => {
+  const pin = assessPin(config.adminPin);
+  if (pin.isDefaultOrCommon) {
+    console.warn(`\n  !! ADMIN_PIN is "${config.adminPin}" - a default. Change it before anyone can reach this.\n`);
+  } else if (pin.tooShort) {
+    console.warn(
+      `\n  !  ADMIN_PIN is only ${pin.length} characters. Login is rate limited (5 tries per 15 min),\n` +
+      `     but 8+ characters costs you nothing and makes guessing hopeless.\n`
+    );
+  }
   console.log(`GHM Football Pool listening on http://localhost:${config.port}`);
   console.log(`  storage: ${config.storage}${config.storage === 'file' ? ` (${config.dataFile})` : ''}`);
   console.log(`  odds api key: ${config.oddsApiKey ? 'configured' : 'NOT SET - manual entry only'}`);

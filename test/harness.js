@@ -65,10 +65,13 @@ async function startServer(overrides = {}) {
 }
 
 /** A browser-ish client: keeps cookies, parses JSON, exposes the status code. */
-function client(base) {
+function client(base, ip) {
   const jar = new Map();
   async function request(method, url, body) {
     const headers = {};
+    // Behind a proxy this is what identifies the caller; login throttling keys
+    // off it, so each test client needs its own.
+    if (ip) headers['X-Forwarded-For'] = ip;
     if (jar.size) headers.Cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(base + url, {

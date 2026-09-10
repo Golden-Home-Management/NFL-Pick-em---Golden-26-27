@@ -219,7 +219,7 @@ committed `.env`.
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `ODDS_API_KEY` | for automatic imports | — | The Odds API key. Without it the app still works fully in manual-entry mode. |
-| `ADMIN_PIN` | yes | `1234` | Commissioner PIN. **Change this.** |
+| `ADMIN_PIN` | yes | `1234` | Commissioner PIN. **Change this**, and make it 8+ characters - it is compared as a string, so it does not have to be four digits. |
 | `SESSION_SECRET` | yes | dev fallback | Signs login cookies. Use a long random string; changing it signs everyone out. |
 | `STORAGE` | no | `file`, or `postgres` if `DATABASE_URL` is set | Storage backend. |
 | `DATA_FILE` | no | `./data/pool.json` | Where the JSON document lives when `STORAGE=file`. Point this at a persistent disk. |
@@ -537,6 +537,16 @@ Simple but not sloppy — this is an internal office game.
 
 - **Admin PIN** required for every `/api/admin/*` route, checked on the server
   on every request.
+- **Login throttling.** Five wrong PINs from one caller (or against one
+  participant) locks that key out for 15 minutes, commissioner included. The
+  counters live in the stored document, not process memory, so they work on
+  serverless hosts where every request may run in a fresh instance. Admin
+  lockouts are written to the audit log.
+- **Use a long `ADMIN_PIN`.** It is compared as a string, so it can be any
+  length - 8+ characters or a short passphrase, not four digits. The server
+  warns at startup if it is short or a common default. This matters most if
+  your repository is public, since the source then tells an attacker exactly
+  what to aim at.
 - **Sessions** are HMAC-SHA256 signed cookies (`HttpOnly`, `SameSite=Lax`,
   `Secure` behind HTTPS). Nothing is stored server-side; a forged or tampered
   cookie is rejected.
@@ -575,7 +585,7 @@ npm test                                        # against the JSON file backend
 TEST_DATABASE_URL=postgres://user@host:5432/postgres npm test
 ```
 
-138 checks against the real HTTP app and a mocked Odds API — no network calls,
+146 checks against the real HTTP app and a mocked Odds API — no network calls,
 no API quota spent. The full suite passes on **both** storage backends, and was
 run against a live Postgres including the serverless case (one process writes,
 a cold second process reads it back). Covering:
@@ -608,6 +618,10 @@ a cold second process reads it back). Covering:
 - commissioner controls: strike rule 1 ⇄ 2 (including reviving a player),
   rename keeping history, PIN reissue, adding and deactivating participants
 - auto score fetch, and a manual score never being overwritten by it
+- login throttling: a 40-attempt brute force on the admin PIN is stopped after
+  5 tries, the correct PIN is refused while locked, one caller's lockout does
+  not affect another, participant PINs are throttled too, an unknown
+  participant is indistinguishable from a wrong PIN, and lockouts are audited
 - security: forged cookies, every admin route gated, cross-participant writes,
   the API key absent from every browser asset and response, PINs and personal
   tokens absent from the participant API, and path traversal
