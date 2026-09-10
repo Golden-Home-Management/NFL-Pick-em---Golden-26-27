@@ -235,7 +235,7 @@ committed `.env`.
 Any of these gives you one permanent URL. Pick the first one you already have
 an account with.
 
-### Option A — Render (recommended; disk-backed, no database at all)
+### Option A — Render (disk-backed, no database at all)
 
 `render.yaml` is included and needs no editing except the domain.
 
@@ -264,7 +264,7 @@ load the subdomain over plain HTTP and will require a valid certificate. There
 is no grace period. Wait until Render reports the certificate issued before
 sharing the link, or people get a TLS error page instead of the pool.
 
-### Option B — Vercel + Supabase (free, serverless)
+### Option B — Vercel + Supabase (recommended when the budget is $0)
 
 1. **Supabase:** create a project. Then click the green **Connect** button in
    the top bar of the dashboard (next to the project/branch name) and copy the
@@ -290,7 +290,23 @@ sharing the link, or people get a TLS error page instead of the pool.
    `pool_state` table on first request, so there is nothing to migrate.
 3. Environment variables: `DATABASE_URL` (the Supabase URI), `STORAGE=postgres`,
    `ODDS_API_KEY`, `ADMIN_PIN`, `SESSION_SECRET`.
-4. Deploy and bookmark the `*.vercel.app` URL (or attach a custom domain).
+4. Deploy and test on the `*.vercel.app` URL.
+5. Custom domain (works on the free Hobby plan, 50 domains per project):
+   Settings → Domains → Add, enter e.g. `pool.example.com`. Vercel shows a
+   **project-specific** CNAME target like `d1d4fc829fe7bc7c.vercel-dns-017.com`
+   — copy that exact value, do not reuse another project's. Add it as a CNAME
+   at your DNS provider, then wait for Vercel to report the certificate issued.
+
+Two things to know about the free tiers:
+
+- Vercel's Hobby plan is documented as being for personal, non-commercial use.
+- Supabase pauses free projects after a stretch of no activity. Weekly use
+  during the season keeps it awake; in the offseason it will pause and you
+  restore it with one click from the dashboard. No data is lost.
+
+The Friday capture works the same here — the included GitHub Actions workflow
+just calls the endpoint over HTTPS, so it does not depend on the host's own
+cron (Hobby's built-in cron is limited to daily).
 
 Firebase/Firestore would work the same way; the storage interface in
 `src/store.js` is two methods (`load`, `save`).
