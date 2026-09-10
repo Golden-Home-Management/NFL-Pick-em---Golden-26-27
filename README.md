@@ -267,8 +267,10 @@ sharing the link, or people get a TLS error page instead of the pool.
 ### Option B — Vercel + Supabase (recommended when the budget is $0)
 
 1. **Supabase:** create a project. Then click the green **Connect** button in
-   the top bar of the dashboard (next to the project/branch name) and copy the
-   **Transaction pooler** URI — it looks like:
+   the top bar of the dashboard (next to the project/branch name). The modal
+   opens on the **Framework** tab, which is not what you want — click the third
+   tab, **Direct / Connection string**. Copy the **Transaction pooler** URI —
+   it looks like:
 
    ```
    postgresql://postgres.<project-ref>:<password>@aws-N-<region>.pooler.supabase.com:6543/postgres
@@ -281,6 +283,20 @@ sharing the link, or people get a TLS error page instead of the pool.
    The Session pooler string (port 5432) works too and is the better pick for a
    long-running server like Render. No SQL to run either way — the app creates
    its one table on the first request.
+
+   **Do not use the string labelled "Direct connection" on a serverless host.**
+   That hostname (`db.<project-ref>.supabase.co`) publishes an AAAA record only
+   — it is reachable over IPv6 and nothing else — and serverless functions on
+   Vercel have no IPv6 egress. The failure looks like a generic connection
+   timeout with nothing in the Supabase logs, which is a miserable thing to
+   debug. The pooler hostnames publish IPv4, which is why they are the right
+   choice here. You can check any host yourself with:
+
+   ```bash
+   # A = IPv4, AAAA = IPv6. You want a host that answers for A.
+   dig +short A    db.<project-ref>.supabase.co     # expect: nothing
+   dig +short A    aws-N-<region>.pooler.supabase.com   # expect: addresses
+   ```
 
    Note: connection strings are **not** under Settings → Database any more, and
    there is no Database item in the Settings sidebar. The **Connect** button is
