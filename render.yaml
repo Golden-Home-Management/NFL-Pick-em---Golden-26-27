@@ -2,12 +2,17 @@
 # The disk keeps data/pool.json across restarts and redeploys.
 services:
   - type: web
-    name: ghm-football-pool
+    name: golden-2026-nfl-pool
     runtime: node
     plan: starter
     buildCommand: npm install --omit=dev
     startCommand: node server.js
     healthCheckPath: /
+    domains:
+      # Render provisions the TLS cert for this automatically once the CNAME
+      # below resolves. goldenatx.com sends HSTS with includeSubDomains, so the
+      # cert must be live before anyone opens the link - there is no http fallback.
+      - 2026nflpool.goldenatx.com
     disk:
       name: pool-data
       mountPath: /var/data

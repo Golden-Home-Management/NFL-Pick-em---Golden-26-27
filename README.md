@@ -235,21 +235,34 @@ committed `.env`.
 Any of these gives you one permanent URL. Pick the first one you already have
 an account with.
 
-### Option A — Render (simplest; disk-backed, no database)
+### Option A — Render (recommended; disk-backed, no database at all)
 
-`render.yaml` is included.
+`render.yaml` is included and needs no editing except the domain.
 
-1. Push this repo to GitHub.
-2. Render → **New** → **Blueprint** → pick the repo. It reads `render.yaml`:
-   build `npm install --omit=dev`, start `node server.js`, and a 1 GB disk
-   mounted at `/var/data` with `DATA_FILE=/var/data/pool.json`.
-3. Add `ODDS_API_KEY` and `ADMIN_PIN` in **Environment**. `SESSION_SECRET` is
+1. Render → **New** → **Blueprint** → pick this repo. It reads `render.yaml`:
+   build `npm install --omit=dev`, start `node server.js`, a 1 GB disk mounted
+   at `/var/data` with `DATA_FILE=/var/data/pool.json`, and the custom domain.
+2. Enter `ODDS_API_KEY` and `ADMIN_PIN` when prompted. `SESSION_SECRET` is
    generated for you.
-4. Bookmark the `https://<name>.onrender.com` URL.
+3. Deploy. The `https://<name>.onrender.com` URL works immediately.
+4. For a custom domain, edit the `domains:` list in `render.yaml` (or add it
+   under Settings → Custom Domains), then add the CNAME that Render shows you
+   at your DNS provider.
 
-A disk requires a paid instance type (a few dollars a month). To stay on the
-free tier, use Option B — free-tier instances have an ephemeral filesystem and
-would lose picks on every redeploy.
+This is the storage backend the whole test suite was written against, and it
+needs no database.
+
+**Free-tier instances will not work**: they cannot have a persistent disk, so
+picks would be lost on every redeploy, and they spin down after 15 minutes of
+inactivity with a ~1 minute cold start. A disk requires a paid instance
+(Starter, a few dollars a month). If you need $0, use Option B.
+
+**A note on HSTS.** If your parent domain sends
+`Strict-Transport-Security` with `includeSubDomains` (many hosts do, including
+Lovable-fronted sites), browsers that have visited the parent will refuse to
+load the subdomain over plain HTTP and will require a valid certificate. There
+is no grace period. Wait until Render reports the certificate issued before
+sharing the link, or people get a TLS error page instead of the pool.
 
 ### Option B — Vercel + Supabase (free, serverless)
 
