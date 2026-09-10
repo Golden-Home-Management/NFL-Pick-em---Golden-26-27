@@ -17,7 +17,7 @@ async function prepareSchema(connectionString, schema) {
 }
 
 function tempDataFile() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ghm-pool-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'golden-pool-test-'));
   return path.join(dir, 'pool.json');
 }
 
@@ -36,7 +36,7 @@ async function startServer(overrides = {}) {
   let storageDefaults = { storage: 'file', dataFile: tempDataFile(), databaseUrl: '' };
   if (testDb) {
     schemaCounter += 1;
-    const schema = `ghm_test_${process.pid}_${schemaCounter}`;
+    const schema = `golden_test_${process.pid}_${schemaCounter}`;
     const url = new URL(testDb);
     url.searchParams.set('options', `-c search_path=${schema}`);
     await prepareSchema(testDb, schema);

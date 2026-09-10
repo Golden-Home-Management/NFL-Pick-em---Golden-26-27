@@ -20,8 +20,8 @@ const { NFL_TEAMS } = require('./teams');
 const { createStore } = require('./store');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const PARTICIPANT_COOKIE = 'ghm_player';
-const ADMIN_COOKIE = 'ghm_admin';
+const PARTICIPANT_COOKIE = 'golden_player';
+const ADMIN_COOKIE = 'golden_admin';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -672,6 +672,7 @@ function createApp(config) {
       season: doc.season,
       poolName: doc.settings.poolName,
       strikeRule: doc.settings.strikeRule,
+      minPicks: scoring.minPicksFor(doc),
       participants: publicParticipants(doc),
       weeks: state.publishedWeekNumbers(doc),
       currentWeek: publicWeek,
@@ -770,6 +771,7 @@ function createApp(config) {
         season: scoring.seasonStandings(doc),
         survivor: scoring.survivorStandings(doc),
         strikeRule: doc.settings.strikeRule,
+        minPicks: scoring.minPicksFor(doc),
         weeks,
       },
     };
@@ -1174,6 +1176,15 @@ function createApp(config) {
         if (typeof body.poolName === 'string' && body.poolName.trim()) {
           doc.settings.poolName = body.poolName.trim().slice(0, 40);
         }
+        if (body.minPicks !== undefined) {
+          const n = Number(body.minPicks);
+          if (!Number.isInteger(n) || n < 0 || n > 500) {
+            throw new HttpError(400, 'Minimum picks must be a whole number between 0 and 500');
+          }
+          const before = scoring.minPicksFor(doc);
+          doc.settings.minPicks = n;
+          state.logAudit(doc, 'commissioner', 'settings.min-picks', { before, after: n });
+        }
         if (body.currentWeek !== undefined && body.currentWeek !== null) {
           const n = Number(body.currentWeek);
           if (!state.getWeek(doc, n)) throw new HttpError(404, `Week ${n} does not exist`);
@@ -1316,7 +1327,7 @@ function createApp(config) {
         send(res, 200, result.body, result.headers || {});
       } catch (err) {
         const status = err.status || 500;
-        if (status >= 500) console.error('[ghm-pool]', req.method, pathname, err);
+        if (status >= 500) console.error('[golden-pool]', req.method, pathname, err);
         send(res, status, { error: err.message || 'Something went wrong' });
       }
       return;

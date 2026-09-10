@@ -10,7 +10,7 @@ const app = createApp(config);
 
 const server = http.createServer((req, res) => {
   app(req, res).catch((err) => {
-    console.error('[ghm-pool] unhandled', err);
+    console.error('[golden-pool] unhandled', err);
     if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Internal error' }));
   });
@@ -28,7 +28,7 @@ server.listen(config.port, () => {
       `     but 8+ characters costs you nothing and makes guessing hopeless.\n`
     );
   }
-  console.log(`GHM Football Pool listening on http://localhost:${config.port}`);
+  console.log(`Golden Football Pool listening on http://localhost:${config.port}`);
   console.log(`  storage: ${config.storage}${config.storage === 'file' ? ` (${config.dataFile})` : ''}`);
   console.log(`  odds api key: ${config.oddsApiKey ? 'configured' : 'NOT SET - manual entry only'}`);
   console.log(`  admin page: http://localhost:${config.port}/admin`);

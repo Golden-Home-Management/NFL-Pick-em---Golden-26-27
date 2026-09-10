@@ -1,4 +1,4 @@
-# GHM Football Pool
+# Golden Football Pool
 
 A small, mobile-first web app for a five-person office football pool. Two
 separate competitions run side by side:
@@ -44,7 +44,7 @@ their personal link, which signs them in with no PIN), and get four tabs:
 | --- | --- |
 | **Make Picks** | Saturday college cards, then every Sunday NFL game in kickoff order, each with the frozen spread and Central kickoff time. |
 | **Survivor** | Every Sunday team as a tappable card. Teams already used are visibly disabled. Your pick history and the field's status are below. |
-| **Standings** | Weekly pick'em, season pick'em, and the survivor table (status, strikes, teams used). |
+| **Standings** | The season leaderboard (winning percentage), the week's points table, and the survivor table (status, strikes, teams used). |
 | **Results** | Week standings plus game-by-game finals, everyone's picks, and pick percentages. Any past week can be re-read from the week selector. |
 
 **The commissioner** gets a PIN-protected `/admin` page: start the next week,
@@ -110,7 +110,7 @@ priorities, not schema elegance.
 ```jsonc
 {
   "season": 2026,
-  "settings": { "poolName": "GHM FOOTBALL POOL", "strikeRule": 2, "currentWeek": 3 },
+  "settings": { "poolName": "GOLDEN FOOTBALL POOL", "strikeRule": 2, "currentWeek": 3 },
   "participants": [ { "id": "p_ab12", "name": "Evan", "pin": "4821", "token": "…", "active": true } ],
   "weeks": {
     "3": {
@@ -226,6 +226,11 @@ committed `.env`.
 | `DATABASE_URL` | for Postgres | — | Postgres/Supabase connection string. |
 | `CRON_SECRET` | no | — | Enables `POST /api/cron/prepare-week`. Blank disables the endpoint entirely. |
 | `SEASON` | no | current year | Season label in the header. |
+
+Pool settings that live in the database (commissioner page, not environment
+variables): the pool name shown in the header, the survivor strike rule (1 or
+2), and the number of graded picks needed to qualify for the season
+leaderboard (default 50).
 | `PORT` | no | `3000` | Listen port. |
 
 ---
@@ -330,11 +335,11 @@ Firebase/Firestore would work the same way; the storage interface in
 ### Option C — Fly.io / Railway / any VPS / Docker
 
 ```bash
-docker build -t ghm-pool .
+docker build -t golden-pool .
 docker run -d --restart unless-stopped -p 3000:3000 \
-  -v ghm-pool-data:/data \
+  -v golden-pool-data:/data \
   -e ODDS_API_KEY=xxxxx -e ADMIN_PIN=4821 -e SESSION_SECRET=$(openssl rand -hex 32) \
-  --name ghm-pool ghm-pool
+  --name golden-pool golden-pool
 ```
 
 On Fly.io, attach a volume and set `DATA_FILE` to a path inside it.
@@ -434,8 +439,8 @@ Saving a score immediately recalculates everything — there is no separate
 "process results" step:
 
 - ATS grade per pick: **win = 1**, **push = 0.5**, **loss = 0**
-- weekly pick'em standings and individual weekly results
-- cumulative season standings
+- weekly pick'em standings (points) and individual weekly results
+- the season leaderboard (winning percentage, and who has reached the minimum)
 - survivor survival/strike, strikes total, teams used, eliminations
 
 To correct a result, just retype it. To correct a pick, use the **Picks &
@@ -505,8 +510,21 @@ unlocking, correcting, and republishing that week alone.
 - Every Sunday NFL game, in kickoff order. **No Thursday or Monday games.**
 - Exactly 3 featured Saturday college games.
 - One side of every listed game, against the frozen spread.
-- ATS win 1 point · push 0.5 · loss 0. Highest weekly total wins the week;
-  season totals accumulate.
+- ATS win 1 point · push 0.5 · loss 0.
+- **An individual week is won on total points.**
+- **The season leaderboard is ranked on winning percentage**, not on total
+  points, so somebody who misses a week is not permanently out of it.
+  Percentage is `points ÷ graded picks`, which means a push counts as half a
+  win - consistent with the 1 / 0.5 / 0 scale the pool already uses. A player
+  who went 6-0-1 shows 92.9%, not 100%.
+- **A player qualifies for the leaderboard at 50 graded picks** (about three
+  and a half weeks at ~16 games a week). The commissioner can change the
+  number in admin settings. Everyone appears on the board from week one, but
+  qualified players always sort above unqualified ones - otherwise someone
+  3-for-3 in September would sit on top for a month. Each row is flagged
+  either "minimum reached" or with how many more picks are needed.
+- Only **graded** picks count toward the minimum. A pick on a game with no
+  final score yet is not counted.
 - A pick locks at its own game's kickoff. Earlier kickoffs never block later
   picks. Once a game kicks off that pick cannot be changed — enforced on the
   server, so a stale browser tab cannot get around it.
@@ -585,13 +603,18 @@ npm test                                        # against the JSON file backend
 TEST_DATABASE_URL=postgres://user@host:5432/postgres npm test
 ```
 
-146 checks against the real HTTP app and a mocked Odds API — no network calls,
+157 checks against the real HTTP app and a mocked Odds API — no network calls,
 no API quota spent. The full suite passes on **both** storage backends, and was
 run against a live Postgres including the serverless case (one process writes,
 a cold second process reads it back). Covering:
 
 - ATS grading: cover, no-cover, exact push, half-point line, pick-em line,
   underdog mirror, ungraded games, and the 1 / 0.5 / 0 scale
+- the season leaderboard: a push counting as half a win, percentage to one
+  decimal, null rather than 0% before anything is graded, the qualification
+  minimum being configurable, a 100% player under the minimum NOT topping the
+  board, percentage beating raw points among qualified players, and lowering
+  the minimum promoting a high-percentage player
 - straight-up survivor grading including a tie
 - the sportsbook hierarchy DraftKings → FanDuel → BetMGM → Caesars, and the
   null result that forces manual entry
@@ -690,4 +713,4 @@ one subtle roofline mark in the header. No odds-boost banners, no green felt, no
 countdown pressure — it reads like a scoreboard, not a sportsbook.
 
 The header text is set from **Pool name** in admin settings if you would rather
-it read something other than "GHM FOOTBALL POOL".
+it read something other than "GOLDEN FOOTBALL POOL".

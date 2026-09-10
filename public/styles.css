@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   GHM Football Pool - mobile-first scoreboard styling.
+   Golden Football Pool - mobile-first scoreboard styling.
    Palette is Golden's brand system: Ink/Linen ground, Navy structure,
    Gold used only as an accent (one primary action at a time).
 --------------------------------------------------------------------------- */
@@ -371,10 +371,43 @@ th {
   background: var(--linen);
 }
 tbody tr:last-child td { border-bottom: none; }
-td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+td.num, th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 6px;
+  padding-right: 8px;
+}
 td.pts { font-weight: 700; font-size: 15px; }
-.rank { font-family: var(--font-mono); color: var(--graphite); width: 28px; }
+.rank { font-family: var(--font-mono); color: var(--graphite); width: 22px; padding-right: 0; }
+
+/* A table is the one thing allowed to scroll sideways rather than squash. */
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tablewrap table { min-width: 100%; }
 tr.me { background: var(--butter); }
+
+.qual {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.qual.yes { color: var(--verified); }
+.qual.no { color: var(--graphite); }
+
+.cardnote {
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--graphite);
+  background: var(--linen);
+  border-top: 1px solid var(--stone);
+}
 
 .status-pill {
   display: inline-flex;

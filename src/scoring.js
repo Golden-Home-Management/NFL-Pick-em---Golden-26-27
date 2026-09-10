@@ -126,20 +126,57 @@ function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
-/** Weekly pick'em standings, highest points first. */
+const DEFAULT_MIN_PICKS = 50;
+
+function minPicksFor(doc) {
+  const n = Number(doc.settings ? doc.settings.minPicks : undefined);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_MIN_PICKS;
+}
+
+/**
+ * ATS winning percentage, out of 100 with one decimal.
+ *
+ * A push counts as half a win, which keeps this consistent with the pool's own
+ * 1 / 0.5 / 0 scale - the percentage is exactly "average points per graded
+ * pick". Returns null when nothing has been graded, so callers can show a dash
+ * instead of a misleading 0%.
+ */
+function winPct(points, graded) {
+  if (!graded) return null;
+  return Math.round((points / graded) * 1000) / 10;
+}
+
+/** Weekly pick'em standings. An individual week is still won on total points. */
 function weeklyStandings(doc, weekNumber) {
   const rows = doc.participants
     .filter((p) => p.active)
     .map((p) => {
       const r = participantWeekResult(doc, weekNumber, p.id);
-      return { participantId: p.id, name: p.name, ...r };
+      return {
+        participantId: p.id,
+        name: p.name,
+        ...r,
+        winPct: winPct(r.points, r.graded),
+      };
     });
-  return rank(rows);
+  return rankByPoints(rows);
 }
 
-/** Cumulative season pick'em standings across every published week. */
+/**
+ * Cumulative season leaderboard, driven by winning percentage.
+ *
+ * A participant qualifies once they have `settings.minPicks` graded picks (50
+ * by default). Everyone appears from week one, but qualified players sort above
+ * unqualified ones - otherwise somebody 3-for-3 in September would sit on top
+ * of the board for a month.
+ */
 function seasonStandings(doc) {
   const weeks = publishedWeekNumbers(doc);
+  const minPicks = minPicksFor(doc);
+
+  // Needed once per week, not once per week per participant.
+  const weeklyByWeek = new Map(weeks.map((w) => [w, weeklyStandings(doc, w)]));
+
   const rows = doc.participants
     .filter((p) => p.active)
     .map((p) => {
@@ -147,6 +184,8 @@ function seasonStandings(doc) {
       let wins = 0;
       let losses = 0;
       let pushes = 0;
+      let graded = 0;
+      let made = 0;
       let weeksWon = 0;
       for (const w of weeks) {
         const r = participantWeekResult(doc, w, p.id);
@@ -154,31 +193,69 @@ function seasonStandings(doc) {
         wins += r.wins;
         losses += r.losses;
         pushes += r.pushes;
-      }
-      for (const w of weeks) {
-        const standings = weeklyStandings(doc, w);
-        const anyGraded = standings.some((s) => s.graded > 0);
-        if (anyGraded && standings[0] && standings[0].points > 0) {
-          const top = standings[0].points;
-          if (standings.find((s) => s.participantId === p.id)?.points === top) weeksWon += 1;
+        graded += r.graded;
+        made += r.made;
+
+        const standings = weeklyByWeek.get(w) || [];
+        const top = standings[0];
+        if (top && top.points > 0 && standings.some((s) => s.graded > 0)) {
+          const mine = standings.find((s) => s.participantId === p.id);
+          if (mine && mine.points === top.points) weeksWon += 1;
         }
       }
-      return { participantId: p.id, name: p.name, points: round1(points), wins, losses, pushes, weeksWon };
+      points = round1(points);
+      return {
+        participantId: p.id,
+        name: p.name,
+        points,
+        wins,
+        losses,
+        pushes,
+        graded,
+        made,
+        weeksWon,
+        winPct: winPct(points, graded),
+        qualified: graded >= minPicks,
+        minPicks,
+        picksToMinimum: Math.max(0, minPicks - graded),
+      };
     });
-  return rank(rows);
+  return rankByWinPct(rows);
 }
 
-function rank(rows) {
+/** Sort on total points. Used for a single week. */
+function rankByPoints(rows) {
   rows.sort((a, b) => b.points - a.points || b.wins - a.wins || a.name.localeCompare(b.name));
-  let lastPoints = null;
+  return assignRanks(rows, (r) => String(r.points));
+}
+
+/**
+ * Sort on winning percentage, with qualified players above unqualified ones.
+ * Total points breaks a percentage tie.
+ */
+function rankByWinPct(rows) {
+  rows.sort(
+    (a, b) =>
+      Number(b.qualified) - Number(a.qualified) ||
+      (b.winPct === null ? -1 : b.winPct) - (a.winPct === null ? -1 : a.winPct) ||
+      b.points - a.points ||
+      a.name.localeCompare(b.name)
+  );
+  return assignRanks(rows, (r) => `${r.qualified}|${r.winPct}`);
+}
+
+/** Equal keys share a rank; the next distinct key resumes the count. */
+function assignRanks(rows, keyOf) {
+  let lastKey = null;
   let lastRank = 0;
   rows.forEach((row, i) => {
-    if (row.points === lastPoints) {
+    const key = keyOf(row);
+    if (lastKey !== null && key === lastKey) {
       row.rank = lastRank;
     } else {
       row.rank = i + 1;
       lastRank = row.rank;
-      lastPoints = row.points;
+      lastKey = key;
     }
   });
   return rows;
@@ -280,6 +357,9 @@ function survivorOptions(doc, weekNumber, participantId) {
 
 module.exports = {
   ATS_POINTS,
+  DEFAULT_MIN_PICKS,
+  minPicksFor,
+  winPct,
   isGameLocked,
   isSurvivorLocked,
   survivorLockTime,

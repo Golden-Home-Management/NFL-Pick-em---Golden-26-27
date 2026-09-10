@@ -1,4 +1,4 @@
-/* GHM Football Pool - participant app. Vanilla JS, no build step. */
+/* Golden Football Pool - participant app. Vanilla JS, no build step. */
 'use strict';
 
 const state = {
@@ -29,6 +29,10 @@ function fmtSpread(n) {
 
 function fmtPoints(n) {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function fmtPct(n) {
+  return n === null || n === undefined ? '&mdash;' : `${n.toFixed(1)}%`;
 }
 
 async function api(path, options = {}) {
@@ -292,10 +296,25 @@ async function renderStandings(weekNumber) {
   weekPicker('standingsWeekPicker', data.weeks, data.week, (w) => renderStandings(w));
   const meId = state.boot.me ? state.boot.me.id : null;
 
-  const row = (r, i) => `<tr class="${r.participantId === meId ? 'me' : ''}">
+  // Weekly: the week is won on points.
+  const weekRow = (r) => `<tr class="${r.participantId === meId ? 'me' : ''}">
       <td class="rank">${r.rank}</td><td>${esc(r.name)}</td>
       <td class="num pts">${fmtPoints(r.points)}</td>
+      <td class="num">${fmtPct(r.winPct)}</td>
       <td class="num">${r.wins}-${r.losses}-${r.pushes}</td></tr>`;
+
+  // Season: the leaderboard is driven by winning percentage.
+  const seasonRow = (r) => `<tr class="${r.participantId === meId ? 'me' : ''}">
+      <td class="rank">${r.rank}</td>
+      <td>${esc(r.name)}<br>${
+        r.qualified
+          ? '<span class="qual yes">&#10003; Minimum reached</span>'
+          : `<span class="qual no">${r.picksToMinimum} more to qualify</span>`
+      }</td>
+      <td class="num pts">${fmtPct(r.winPct)}</td>
+      <td class="num">${r.wins}-${r.losses}-${r.pushes}</td>
+      <td class="num">${fmtPoints(r.points)}<br><span style="font-size:10px;color:#4A4E55">${r.graded} graded</span></td>
+    </tr>`;
 
   const survivorRows = data.survivor
     .map(
@@ -308,16 +327,22 @@ async function renderStandings(weekNumber) {
     )
     .join('');
 
+  const anyQualified = data.season.some((r) => r.qualified);
   $('standingsContent').innerHTML = `
-    <div class="card"><h3>Pick'em &mdash; Week ${data.week ?? '&mdash;'}</h3>
-      <table><thead><tr><th></th><th>Player</th><th class="num">Points</th><th class="num">W-L-P</th></tr></thead>
-      <tbody>${data.weekly.map(row).join('') || '<tr><td colspan="4">No results yet.</td></tr>'}</tbody></table></div>
-    <div class="card"><h3>Pick'em &mdash; Season</h3>
-      <table><thead><tr><th></th><th>Player</th><th class="num">Points</th><th class="num">W-L-P</th></tr></thead>
-      <tbody>${data.season.map(row).join('')}</tbody></table></div>
+    <div class="card"><h3>Season leaderboard &mdash; win %</h3>
+      <div class="tablewrap"><table><thead><tr><th></th><th>Player</th><th class="num">Win %</th><th class="num">W-L-P</th><th class="num">Points</th></tr></thead>
+      <tbody>${data.season.map(seasonRow).join('')}</tbody></table></div>
+      <p class="cardnote">Ranked on winning percentage. A push counts as half a win.
+        ${data.minPicks} graded picks needed to qualify${anyQualified ? '' : ' &mdash; nobody has qualified yet, so this is provisional'}.</p>
+    </div>
+    <div class="card"><h3>Week ${data.week ?? '&mdash;'} &mdash; points</h3>
+      <div class="tablewrap"><table><thead><tr><th></th><th>Player</th><th class="num">Points</th><th class="num">Win %</th><th class="num">W-L-P</th></tr></thead>
+      <tbody>${data.weekly.map(weekRow).join('') || '<tr><td colspan="5">No results yet.</td></tr>'}</tbody></table></div>
+      <p class="cardnote">The week itself is won on total points.</p>
+    </div>
     <div class="card"><h3>Survivor</h3>
-      <table><thead><tr><th>Player</th><th>Status</th><th class="num">Strikes</th><th>Teams used</th></tr></thead>
-      <tbody>${survivorRows}</tbody></table></div>`;
+      <div class="tablewrap"><table><thead><tr><th>Player</th><th>Status</th><th class="num">Strikes</th><th>Teams used</th></tr></thead>
+      <tbody>${survivorRows}</tbody></table></div></div>`;
 }
 
 async function renderResults(weekNumber) {
@@ -335,13 +360,14 @@ async function renderResults(weekNumber) {
       (r) => `<tr class="${r.participantId === meId ? 'me' : ''}">
         <td class="rank">${r.rank}</td><td>${esc(r.name)}</td>
         <td class="num pts">${fmtPoints(r.points)}</td>
+        <td class="num">${fmtPct(r.winPct)}</td>
         <td class="num">${r.wins}-${r.losses}-${r.pushes}</td></tr>`
     )
     .join('');
   const graded = data.games.filter((g) => g.final).length;
   $('resultsContent').innerHTML = `
     <div class="card"><h3>Week ${data.week} standings</h3>
-      <table><thead><tr><th></th><th>Player</th><th class="num">Points</th><th class="num">W-L-P</th></tr></thead>
+      <table><thead><tr><th></th><th>Player</th><th class="num">Points</th><th class="num">Win %</th><th class="num">W-L-P</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="section-head"><h2>Game by game</h2><span class="hint">${graded} of ${data.games.length} final</span></div>
     ${data.games.map((g) => gameCard(g)).join('')}

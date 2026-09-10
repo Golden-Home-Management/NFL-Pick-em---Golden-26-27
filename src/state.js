@@ -59,8 +59,9 @@ function defaultDoc(season) {
     schema: 1,
     season: Number(season) || new Date().getUTCFullYear(),
     settings: {
-      poolName: 'GHM FOOTBALL POOL',
+      poolName: 'GOLDEN FOOTBALL POOL',
       strikeRule: 2, // strikes required for elimination; commissioner can set 1 or 2
+      minPicks: 50, // graded picks needed to qualify for the season leaderboard
       currentWeek: null, // the week the commissioner is editing
     },
     participants: DEFAULT_PARTICIPANTS.map(makeParticipant),

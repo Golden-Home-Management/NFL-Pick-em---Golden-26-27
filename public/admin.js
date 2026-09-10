@@ -1,4 +1,4 @@
-/* GHM Football Pool - commissioner console. */
+/* Golden Football Pool - commissioner console. */
 'use strict';
 
 const A = { state: null, week: null, weekNumber: null };
@@ -111,6 +111,7 @@ function renderWeekPicker() {
   $('adminSub').textContent = A.weekNumber ? `Week ${A.weekNumber}` : 'No week yet';
   $('strikeRule').value = String(s.settings.strikeRule);
   $('poolNameInput').value = s.settings.poolName;
+  $('minPicks').value = s.settings.minPicks === undefined ? 50 : s.settings.minPicks;
   configNotice(
     s.oddsApiConfigured
       ? ''
@@ -345,7 +346,11 @@ $('saveCollegeBtn').onclick = () => {
 $('saveSettingsBtn').onclick = () =>
   act('saveSettingsBtn', () => api('/api/admin/settings', {
     method: 'POST',
-    body: JSON.stringify({ strikeRule: Number($('strikeRule').value), poolName: $('poolNameInput').value }),
+    body: JSON.stringify({
+      strikeRule: Number($('strikeRule').value),
+      poolName: $('poolNameInput').value,
+      minPicks: Number($('minPicks').value),
+    }),
   }), 'Settings saved');
 
 $('saveDeadlineBtn').onclick = () =>

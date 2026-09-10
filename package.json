@@ -1,8 +1,8 @@
 {
-  "name": "ghm-football-pool",
+  "name": "golden-football-pool",
   "version": "1.0.0",
   "private": true,
-  "description": "GHM Football Pool - NFL Survivor + Weekly NFL/College Pick'em ATS for a small office pool",
+  "description": "Golden Football Pool - NFL Survivor + Weekly NFL/College Pick'em ATS for a small office pool",
   "type": "commonjs",
   "main": "server.js",
   "engines": {

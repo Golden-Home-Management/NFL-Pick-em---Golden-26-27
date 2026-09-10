@@ -20,9 +20,9 @@ function loadEnvFile(file = path.join(process.cwd(), '.env')) {
 }
 
 function buildConfig(env = process.env) {
-  const secret = env.SESSION_SECRET || 'ghm-pool-dev-secret-change-me';
+  const secret = env.SESSION_SECRET || 'golden-pool-dev-secret-change-me';
   if (!env.SESSION_SECRET && env.NODE_ENV === 'production') {
-    console.warn('[ghm-pool] SESSION_SECRET is not set - sessions will not survive a restart safely.');
+    console.warn('[golden-pool] SESSION_SECRET is not set - sessions will not survive a restart safely.');
   }
   return {
     port: Number(env.PORT) || 3000,

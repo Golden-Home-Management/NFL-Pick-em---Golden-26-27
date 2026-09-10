@@ -1,6 +1,6 @@
 'use strict';
 /**
- * End-to-end tests for the GHM Football Pool.
+ * End-to-end tests for the Golden Football Pool.
  * Runs the real HTTP app against a mocked Odds API and a temp data file.
  *
  *   npm test
@@ -136,6 +136,126 @@ function testScoringUnits() {
 /* ========================================================================= */
 /* 2. Friday import workflow                                                 */
 /* ========================================================================= */
+
+function testWinPctRules() {
+  group('Season leaderboard: winning percentage + qualification minimum');
+  const scoring = require('../src/scoring');
+
+  check('a push counts as half a win in the percentage', () => {
+    assert.strictEqual(scoring.winPct(5, 10), 50);      // ten pushes
+    assert.strictEqual(scoring.winPct(10, 10), 100);    // ten wins
+    assert.strictEqual(scoring.winPct(0, 10), 0);       // ten losses
+  });
+  check('percentage is points per graded pick, to one decimal', () => {
+    assert.strictEqual(scoring.winPct(8.5, 14), 60.7);
+  });
+  check('nothing graded yet reads as null, not 0%', () => {
+    assert.strictEqual(scoring.winPct(0, 0), null);
+  });
+  check('the minimum defaults to 50 and is configurable', () => {
+    assert.strictEqual(scoring.minPicksFor({ settings: {} }), 50);
+    assert.strictEqual(scoring.minPicksFor({ settings: { minPicks: 30 } }), 30);
+    assert.strictEqual(scoring.DEFAULT_MIN_PICKS, 50);
+  });
+
+  // Build a synthetic season: A is 60% over 60 picks (qualified),
+  // B is 100% over 10 picks (not qualified), C is 55% over 80 picks (qualified).
+  // Build a synthetic season. Each participant gets its own private games so
+  // one player's finals cannot alter another's record.
+  function synth(spec) {
+    const doc = {
+      season: 2026,
+      settings: { strikeRule: 2, minPicks: 50, poolName: 'x' },
+      participants: spec.map((p, i) => ({ id: `p${i}`, name: p.name, active: true })),
+      weeks: {},
+      picks: {},
+      survivorPicks: {},
+      audit: [],
+    };
+    const games = [];
+    // Home team is -3, so: home by 10 = cover, home by exactly 3 = push,
+    // away win = no cover.
+    const FINALS = {
+      win: { homeScore: 20, awayScore: 10 },
+      push: { homeScore: 13, awayScore: 10 },
+      loss: { homeScore: 10, awayScore: 20 },
+    };
+    spec.forEach((p, i) => {
+      const pid = `p${i}`;
+      let n = 0;
+      for (const [outcome, count] of [['win', p.wins], ['push', p.pushes], ['loss', p.losses]]) {
+        for (let k = 0; k < count; k += 1, n += 1) {
+          const id = `${pid}_g${n}`;
+          games.push({
+            id,
+            sport: 'nfl',
+            commenceTime: '2026-09-13T17:00:00Z',
+            homeTeam: `H_${id}`,
+            awayTeam: `A_${id}`,
+            spread: -3,
+            final: { ...FINALS[outcome], at: 'x', source: 'manual' },
+          });
+          doc.picks[`1|${pid}|${id}`] = { side: 'home', at: 'x' };
+        }
+      }
+    });
+    doc.weeks['1'] = {
+      number: 1,
+      status: 'complete',
+      sundayDate: '2026-09-13',
+      saturdayDate: '2026-09-12',
+      games,
+      collegeCandidates: [],
+    };
+    return doc;
+  }
+
+  const doc = synth([
+    { name: 'Alice', wins: 36, pushes: 0, losses: 24 },  // 60 graded, 60.0%
+    { name: 'Bob', wins: 10, pushes: 0, losses: 0 },     // 10 graded, 100.0%
+    { name: 'Cara', wins: 44, pushes: 0, losses: 36 },   // 80 graded, 55.0%
+  ]);
+  const season = scoring.seasonStandings(doc);
+  const by = (n) => season.find((r) => r.name === n);
+
+  check('percentages are computed over each player\'s own graded picks', () => {
+    assert.strictEqual(by('Alice').graded, 60);
+    assert.strictEqual(by('Alice').winPct, 60);
+    assert.strictEqual(by('Bob').graded, 10);
+    assert.strictEqual(by('Bob').winPct, 100);
+    assert.strictEqual(by('Cara').winPct, 55);
+  });
+  check('qualification is graded picks >= the minimum', () => {
+    assert.strictEqual(by('Alice').qualified, true);
+    assert.strictEqual(by('Cara').qualified, true);
+    assert.strictEqual(by('Bob').qualified, false);
+  });
+  check('a 100% player under the minimum does NOT top the leaderboard', () => {
+    assert.strictEqual(season[0].name, 'Alice', `got ${season[0].name}`);
+    assert.strictEqual(season[season.length - 1].name, 'Bob');
+  });
+  check('qualified players are ranked by win %, not by points', () => {
+    // Cara has more total points than Alice but a lower percentage.
+    assert.ok(by('Cara').points > by('Alice').points, 'Cara should have more points');
+    assert.ok(by('Alice').rank < by('Cara').rank, 'Alice should still rank higher');
+  });
+  check('unqualified players report how many picks they still need', () => {
+    assert.strictEqual(by('Bob').picksToMinimum, 40);
+    assert.strictEqual(by('Alice').picksToMinimum, 0);
+  });
+  check('the record is still reported alongside the percentage', () => {
+    assert.strictEqual(by('Alice').wins, 36);
+    assert.strictEqual(by('Alice').losses, 24);
+    assert.strictEqual(by('Alice').points, 36);
+  });
+
+  doc.settings.minPicks = 5;
+  const relaxed = scoring.seasonStandings(doc);
+  check('lowering the minimum lets a high-percentage player take the lead', () => {
+    assert.strictEqual(relaxed[0].name, 'Bob');
+    assert.strictEqual(relaxed.find((r) => r.name === 'Bob').qualified, true);
+  });
+}
 
 async function testFridayWorkflow() {
   group('Friday workflow: import, filter, freeze');
@@ -1015,11 +1135,11 @@ async function testSecurity() {
       assert.strictEqual(matrix.find((m) => m.participantId === p1.id).picks[0].side, 'away');
     });
 
-    attacker.jar.set('ghm_player', `${p1.id}.9999999999999.forgedsignature`);
+    attacker.jar.set('golden_player', `${p1.id}.9999999999999.forgedsignature`);
     res = await attacker.post('/api/picks', { week: 1, picks: [{ gameId: gid, side: 'away' }] });
     check('a forged session cookie is rejected', () => assert.strictEqual(res.status, 401));
 
-    attacker.jar.set('ghm_admin', 'admin.9999999999999.forgedsignature');
+    attacker.jar.set('golden_admin', 'admin.9999999999999.forgedsignature');
     res = await attacker.get('/api/admin/state');
     check('a forged admin cookie is rejected', () => assert.strictEqual(res.status, 401));
 
@@ -1074,6 +1194,7 @@ async function testSecurity() {
 
 (async () => {
   testScoringUnits();
+  testWinPctRules();
   await testFridayWorkflow();
   await testPublishGuards();
   await testCron();
