@@ -253,9 +253,25 @@ would lose picks on every redeploy.
 
 ### Option B — Vercel + Supabase (free, serverless)
 
-1. **Supabase:** create a project. Settings → Database → **Connection string** →
-   URI (use the *session pooler* string). Copy it. No SQL to run — the app
-   creates its one table on first use.
+1. **Supabase:** create a project. Then click the green **Connect** button in
+   the top bar of the dashboard (next to the project/branch name) and copy the
+   **Transaction pooler** URI — it looks like:
+
+   ```
+   postgresql://postgres.<project-ref>:<password>@aws-N-<region>.pooler.supabase.com:6543/postgres
+   ```
+
+   Replace `[YOUR-PASSWORD]` with your database password. If the password has
+   any of `@ : / ? # [ ] %` in it, URL-encode those characters (`@` becomes
+   `%40`, and so on); plain letters and digits need nothing.
+
+   The Session pooler string (port 5432) works too and is the better pick for a
+   long-running server like Render. No SQL to run either way — the app creates
+   its one table on the first request.
+
+   Note: connection strings are **not** under Settings → Database any more, and
+   there is no Database item in the Settings sidebar. The **Connect** button is
+   the only place they live.
 2. **Vercel:** import the repo. `vercel.json` routes everything to
    `api/index.js`; there is no build step to configure. The app creates its
    `pool_state` table on first request, so there is nothing to migrate.
