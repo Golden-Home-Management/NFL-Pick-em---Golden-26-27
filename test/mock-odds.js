@@ -7,27 +7,43 @@
 
 const realFetch = globalThis.fetch;
 
-/** Times are Central: CDT is UTC-5 in September. */
+/**
+ * Dates are anchored to the NEXT upcoming Sunday rather than hardcoded, so the
+ * suite keeps testing the same thing in October as it did in September. A
+ * fixed-date mock quietly stops exercising the import path once the real
+ * calendar moves past it.
+ */
+const timeutil = require('../src/time');
+
+const SUNDAY = timeutil.nextSunday(timeutil.ctDate(new Date()));
+const SATURDAY = timeutil.addDays(SUNDAY, -1);
+const FRIDAY = timeutil.addDays(SUNDAY, -2);
+const THURSDAY = timeutil.addDays(SUNDAY, -3);
+const MONDAY = timeutil.addDays(SUNDAY, 1);
+
+/** A Central wall-clock time on one of those days, as an ISO UTC string. */
+const at = (day, hour, minute = 0) => timeutil.ctToUtc(day, hour, minute).toISOString();
+
 const NFL_EVENTS = [
   // Thursday night - must be excluded from both competitions.
-  event('nfl-thu', '2026-09-10T23:20:00Z', 'Kansas City Chiefs', 'Baltimore Ravens', -3.5),
+  event('nfl-thu', at(THURSDAY, 19, 20), 'Kansas City Chiefs', 'Baltimore Ravens', -3.5),
   // Sunday slate.
-  event('nfl-sun-1', '2026-09-13T17:00:00Z', 'Dallas Cowboys', 'Philadelphia Eagles', -7.5),
-  event('nfl-sun-2', '2026-09-13T17:00:00Z', 'Green Bay Packers', 'Chicago Bears', -8),
-  event('nfl-sun-3', '2026-09-13T20:25:00Z', 'San Francisco 49ers', 'Seattle Seahawks', -3),
-  event('nfl-sun-4', '2026-09-14T00:20:00Z', 'Buffalo Bills', 'Miami Dolphins', -6.5), // Sunday 7:20 PM CT
+  event('nfl-sun-1', at(SUNDAY, 12), 'Dallas Cowboys', 'Philadelphia Eagles', -7.5),
+  event('nfl-sun-2', at(SUNDAY, 12), 'Green Bay Packers', 'Chicago Bears', -8),
+  event('nfl-sun-3', at(SUNDAY, 15, 25), 'San Francisco 49ers', 'Seattle Seahawks', -3),
+  event('nfl-sun-4', at(SUNDAY, 19, 20), 'Buffalo Bills', 'Miami Dolphins', -6.5),
   // Monday night - must be excluded.
-  event('nfl-mon', '2026-09-15T00:15:00Z', 'Detroit Lions', 'New York Giants', -5.5),
+  event('nfl-mon', at(MONDAY, 19, 15), 'Detroit Lions', 'New York Giants', -5.5),
 ];
 
 const CFB_EVENTS = [
-  event('cfb-1', '2026-09-12T19:30:00Z', 'Michigan Wolverines', 'Texas Longhorns', 7.5, 9),
-  event('cfb-2', '2026-09-12T23:30:00Z', 'Georgia Bulldogs', 'Alabama Crimson Tide', -2.5, 11),
-  event('cfb-3', '2026-09-13T00:00:00Z', 'Ohio State Buckeyes', 'Penn State Nittany Lions', -6, 10),
-  event('cfb-4', '2026-09-12T16:00:00Z', 'Kent State Golden Flashes', 'Ball State Cardinals', -1, 3),
-  event('cfb-5', '2026-09-12T18:00:00Z', 'Texas State Bobcats', 'Georgia State Panthers', -4.5, 4),
+  event('cfb-1', at(SATURDAY, 14, 30), 'Michigan Wolverines', 'Texas Longhorns', 7.5, 9),
+  event('cfb-2', at(SATURDAY, 18, 30), 'Georgia Bulldogs', 'Alabama Crimson Tide', -2.5, 11),
+  event('cfb-3', at(SATURDAY, 19), 'Ohio State Buckeyes', 'Penn State Nittany Lions', -6, 10),
+  event('cfb-4', at(SATURDAY, 11), 'Kent State Golden Flashes', 'Ball State Cardinals', -1, 3),
+  event('cfb-5', at(SATURDAY, 13), 'Texas State Bobcats', 'Georgia State Panthers', -4.5, 4),
   // Friday game - never a candidate.
-  event('cfb-fri', '2026-09-11T23:00:00Z', 'Boise State Broncos', 'Fresno State Bulldogs', -10, 6),
+  event('cfb-fri', at(FRIDAY, 18), 'Boise State Broncos', 'Fresno State Bulldogs', -10, 6),
 ];
 
 function event(id, commence, home, away, homeSpread, bookCount = 8) {
@@ -53,7 +69,7 @@ function event(id, commence, home, away, homeSpread, bookCount = 8) {
       markets: [
         {
           key: 'spreads',
-          last_update: '2026-09-11T15:00:00Z',
+          last_update: at(FRIDAY, 10),
           outcomes: [
             { name: home, point: homeSpread, price: -110 },
             { name: away, point: -homeSpread, price: -110 },
@@ -106,4 +122,4 @@ function installMockOdds(options = {}) {
   return { calls, restore: () => { globalThis.fetch = realFetch; } };
 }
 
-module.exports = { installMockOdds, NFL_EVENTS, CFB_EVENTS };
+module.exports = { installMockOdds, NFL_EVENTS, CFB_EVENTS, SUNDAY, SATURDAY };

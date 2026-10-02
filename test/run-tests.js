@@ -8,7 +8,7 @@
 
 const assert = require('assert');
 const { startServer, client } = require('./harness');
-const { installMockOdds, NFL_EVENTS } = require('./mock-odds');
+const { installMockOdds, NFL_EVENTS, SUNDAY, SATURDAY } = require('./mock-odds');
 const odds = require('../src/odds');
 const timeutil = require('../src/time');
 
@@ -277,12 +277,12 @@ async function testFridayWorkflow() {
     res = await admin.post('/api/admin/login', { pin: '9137' });
     check('correct commissioner PIN signs in', () => assert.strictEqual(res.status, 200));
 
-    res = await admin.post('/api/admin/week/start', { sundayDate: '2026-09-13' });
+    res = await admin.post('/api/admin/week/start', { sundayDate: SUNDAY });
     const startOut = res.data;
     check('Start Next Week creates week 1', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(startOut.week, 1);
-      assert.strictEqual(startOut.saturdayDate, '2026-09-12');
+      assert.strictEqual(startOut.saturdayDate, SATURDAY);
     });
 
     res = await admin.get('/api/admin/week?week=1');
@@ -427,7 +427,7 @@ async function testFridayWorkflow() {
 async function testPublishGuards() {
   group('Publish guards and Odds API failure fallback');
   const noLine = [{
-    id: 'nfl-noline', commence_time: '2026-09-13T17:00:00Z',
+    id: 'nfl-noline', commence_time: timeutil.ctToUtc(SUNDAY, 12).toISOString(),
     home_team: 'Dallas Cowboys', away_team: 'Philadelphia Eagles',
     bookmakers: [{ key: 'bovada', markets: [{ key: 'spreads', outcomes: [{ name: 'Dallas Cowboys', point: -7 }, { name: 'Philadelphia Eagles', point: 7 }] }] }],
   }];
@@ -436,7 +436,7 @@ async function testPublishGuards() {
   const admin = client(srv.base);
   try {
     await admin.post('/api/admin/login', { pin: '9137' });
-    await admin.post('/api/admin/week/start', { sundayDate: '2026-09-13' });
+    await admin.post('/api/admin/week/start', { sundayDate: SUNDAY });
 
     let res = await admin.post('/api/admin/week/publish', { week: 1 });
     check('publishing is blocked while a game has no spread', () => {
@@ -992,7 +992,7 @@ async function testGameplay() {
     try {
       const mockFull = installMockOdds({ scores: { 'nfl-sun-1': { home: 27, away: 17 } } });
       await admin2.post('/api/admin/login', { pin: '9137' });
-      await admin2.post('/api/admin/week/start', { sundayDate: '2026-09-13' });
+      await admin2.post('/api/admin/week/start', { sundayDate: SUNDAY });
       await admin2.post('/api/admin/week/publish', { week: 1 });
       const r = await admin2.post('/api/admin/week/fetch-scores', { week: 1 });
       check('completed games are pulled from the Odds API scores feed', () => {

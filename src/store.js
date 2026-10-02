@@ -48,35 +48,87 @@ class FileBackend {
 }
 
 class PostgresBackend {
+  /**
+   * Tuned for serverless, where this is the hard-won shape:
+   *
+   * Supabase's pooler shuts the tenant pool down a couple of minutes after the
+   * last client disconnects. The next visitor therefore pays a full pooler
+   * cold start, which can take several seconds. A pg.Pool with no connection
+   * timeout simply *waits* through that, so on Vercel's Hobby plan the 10s
+   * function limit killed the request and the visitor saw nothing at all.
+   *
+   * So: fail fast rather than hang, then retry once - the retry lands on a
+   * pool that the first attempt just warmed up, which is exactly the case
+   * that was failing.
+   */
   constructor(connectionString) {
     // Required lazily so `pg` is only needed when this backend is selected.
     const { Pool } = require('pg');
+    const local = /localhost|127\.0\.0\.1/.test(connectionString);
     this.pool = new Pool({
       connectionString,
-      max: 3,
-      ssl: /localhost|127\.0\.0\.1/.test(connectionString) ? false : { rejectUnauthorized: false },
+      // One request per instance at a time, so one connection is enough and
+      // we hold the fewest possible slots on the shared pooler.
+      max: 1,
+      // Never wait indefinitely for a connection - surface a real error.
+      connectionTimeoutMillis: local ? 5000 : 4000,
+      // Release promptly; a frozen serverless instance should not sit on a slot.
+      idleTimeoutMillis: 5000,
+      // A query that somehow runs long must not eat the whole function budget.
+      statement_timeout: 8000,
+      ssl: local ? false : { rejectUnauthorized: false },
     });
-    this.ready = null;
+    // Swallow background errors on idle clients; a dropped pooler connection
+    // is routine here and must not take the process down.
+    this.pool.on('error', () => {});
+    this.tableChecked = false;
   }
 
-  async init() {
-    if (!this.ready) {
-      this.ready = this.pool.query(
-        'CREATE TABLE IF NOT EXISTS pool_state (id int PRIMARY KEY, doc jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())'
-      );
+  /** Is this worth a second attempt? Connection-level failures are; SQL errors are not. */
+  static isTransient(err) {
+    const code = err && err.code;
+    return (
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNRESET' ||
+      code === 'ECONNREFUSED' ||
+      code === 'EPIPE' ||
+      code === '57P01' || // admin_shutdown
+      code === '57P03' || // cannot_connect_now - pooler still starting
+      code === '08006' ||
+      code === '08003' ||
+      /timeout exceeded when trying to connect|Connection terminated/i.test(String(err && err.message))
+    );
+  }
+
+  async query(text, values) {
+    try {
+      return await this.pool.query(text, values);
+    } catch (err) {
+      // The table is created lazily: paying for a CREATE TABLE round trip on
+      // every cold start was a measurable slice of the budget that was being
+      // overrun, and it only ever matters once.
+      if (err && err.code === '42P01' && !this.tableChecked) {
+        this.tableChecked = true;
+        await this.pool.query(
+          'CREATE TABLE IF NOT EXISTS pool_state (id int PRIMARY KEY, doc jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())'
+        );
+        return this.pool.query(text, values);
+      }
+      if (PostgresBackend.isTransient(err)) {
+        // The failed attempt has woken the pooler; the retry usually lands.
+        return this.pool.query(text, values);
+      }
+      throw err;
     }
-    return this.ready;
   }
 
   async load() {
-    await this.init();
-    const res = await this.pool.query('SELECT doc FROM pool_state WHERE id = 1');
+    const res = await this.query('SELECT doc FROM pool_state WHERE id = 1');
     return res.rows.length ? res.rows[0].doc : null;
   }
 
   async save(doc) {
-    await this.init();
-    await this.pool.query(
+    await this.query(
       `INSERT INTO pool_state (id, doc, updated_at) VALUES (1, $1, now())
        ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = now()`,
       [JSON.stringify(doc)]
