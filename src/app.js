@@ -679,6 +679,11 @@ function createApp(config) {
       me: participant ? { id: participant.id, name: participant.name } : null,
       isAdmin: isAdmin(req),
       nowCt: timeutil.formatStamp(new Date()),
+      // Which build is actually serving. Vercel sets these at build time; they
+      // are the only reliable way to tell from outside whether a push has
+      // really shipped. Public repo, so neither value is sensitive.
+      build: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'local',
+      deployment: (process.env.VERCEL_DEPLOYMENT_ID || '').slice(-8) || null,
     };
     const headers = {};
     if (viaLink) {
